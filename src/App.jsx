@@ -572,6 +572,7 @@ function App() {
 
         // Initialize audio engine
         const audioEngine = new CosmicAudioEngine();
+        await audioEngine.init();
         audioEngineRef.current = audioEngine;
 
         // Initialize radar
