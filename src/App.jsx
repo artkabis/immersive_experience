@@ -200,11 +200,18 @@ function App() {
   };
 
   // Toggle audio
-  const toggleAudio = () => {
+  const toggleAudio = async () => {
     if (!audioEngineRef.current) return;
-    const playing = audioEngineRef.current.toggle();
-    setAudioPlaying(playing);
-    showModeIndicator(playing ? 'AUDIO ACTIVÉ' : 'AUDIO DÉSACTIVÉ');
+
+    if (audioEngineRef.current.isPlaying) {
+      audioEngineRef.current.stop();
+      setAudioPlaying(false);
+      showModeIndicator('AUDIO DÉSACTIVÉ');
+    } else {
+      await audioEngineRef.current.start();
+      setAudioPlaying(true);
+      showModeIndicator('AUDIO ACTIVÉ');
+    }
   };
 
   // Handle section navigation
@@ -314,11 +321,6 @@ function App() {
     if (radarVisible && radarRef.current) {
       radarRef.current.update(bodiesRef.current, Date.now());
       radarRef.current.draw();
-    }
-
-    // Update audio visualizer
-    if (audioPlaying && audioEngineRef.current) {
-      audioEngineRef.current.updateVisualizer();
     }
 
     cameraRef.current.lookAt(0, 3, 0);
@@ -830,7 +832,10 @@ function App() {
       />
 
       {/* Audio Visualizer */}
-      <AudioVisualizer playing={audioPlaying} />
+      <AudioVisualizer
+        playing={audioPlaying}
+        analyser={audioEngineRef.current?.analyser || null}
+      />
 
       {/* Section Indicator */}
       <SectionIndicator

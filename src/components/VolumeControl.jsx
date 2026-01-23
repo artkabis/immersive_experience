@@ -1,19 +1,19 @@
 import React, { useState, useCallback } from 'react';
 
-const VolumeControl = ({ initialVolume = 30, onVolumeChange = null, isVisible = false }) => {
+const VolumeControl = ({ initialVolume = 30, onVolumeChange = null, visible = false }) => {
   const [volume, setVolume] = useState(initialVolume);
 
   const handleVolumeChange = useCallback((e) => {
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
     if (onVolumeChange) {
-      onVolumeChange(newVolume / 100);
+      onVolumeChange(newVolume);
     }
   }, [onVolumeChange]);
 
   return (
     <div
-      className={`volume-control ${isVisible ? 'visible' : ''}`}
+      className={`volume-control ${visible ? 'visible' : ''}`}
       id="volumeControl"
     >
       <label>🔊</label>

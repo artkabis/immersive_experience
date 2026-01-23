@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 
-const AudioVisualizer = ({ isPlaying = false, analyser = null }) => {
+const AudioVisualizer = ({ playing = false, analyser = null }) => {
   const containerRef = useRef(null);
   const barsRef = useRef([]);
   const dataArrayRef = useRef(null);
@@ -21,7 +21,7 @@ const AudioVisualizer = ({ isPlaying = false, analyser = null }) => {
   }, []);
 
   useEffect(() => {
-    if (!isPlaying || !analyser) {
+    if (!playing || !analyser) {
       return;
     }
 
@@ -38,7 +38,7 @@ const AudioVisualizer = ({ isPlaying = false, analyser = null }) => {
         bar.style.height = height + 'px';
       });
 
-      if (isPlaying) {
+      if (playing) {
         requestAnimationFrame(updateVisualization);
       }
     };
@@ -46,11 +46,11 @@ const AudioVisualizer = ({ isPlaying = false, analyser = null }) => {
     const animationId = requestAnimationFrame(updateVisualization);
 
     return () => cancelAnimationFrame(animationId);
-  }, [isPlaying, analyser]);
+  }, [playing, analyser]);
 
   return (
     <div
-      className={`audio-visualizer ${isPlaying ? 'playing' : ''}`}
+      className={`audio-visualizer ${playing ? 'playing' : ''}`}
       id="audioVisualizer"
       ref={containerRef}
     />

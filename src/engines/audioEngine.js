@@ -29,32 +29,6 @@ class CosmicAudioEngine {
         this.analyser.fftSize = 64;
         this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
         this.masterGain.connect(this.analyser);
-
-        // Créer le visualiseur
-        this.createVisualizer();
-    }
-
-    createVisualizer() {
-        const visualizer = document.getElementById('audioVisualizer');
-        visualizer.innerHTML = '';
-        for (let i = 0; i < 24; i++) {
-            const bar = document.createElement('div');
-            bar.className = 'audio-bar';
-            visualizer.appendChild(bar);
-        }
-    }
-
-    updateVisualizer() {
-        if (!this.isPlaying || !this.analyser) return;
-
-        this.analyser.getByteFrequencyData(this.dataArray);
-        const bars = document.querySelectorAll('.audio-bar');
-
-        bars.forEach((bar, i) => {
-            const value = this.dataArray[i] || 0;
-            const height = Math.max(3, (value / 255) * 25);
-            bar.style.height = height + 'px';
-        });
     }
 
     setVolume(value) {
@@ -886,7 +860,6 @@ class CosmicAudioEngine {
     stop() {
         this.isPlaying = false;
         this.stopAmbient();
-        document.getElementById('audioVisualizer').classList.remove('playing');
     }
 
     toggle() {
