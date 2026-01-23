@@ -584,6 +584,7 @@ function App() {
         // GSAP ScrollTrigger
         const totalSections = 11;
         const sectionDuration = 1 / totalSections;
+        let previousSection = 0; // Track previous section locally to avoid closure issues
 
         const mainTimeline = gsap.timeline({
           scrollTrigger: {
@@ -596,10 +597,11 @@ function App() {
               setScrollProgress(progress);
 
               const newSection = Math.min(Math.floor(progress * totalSections), totalSections - 1);
-              if (newSection !== currentSection) {
+              if (newSection !== previousSection) {
+                previousSection = newSection; // Update local tracker
                 updateUI(newSection);
                 updateGridColor(newSection);
-                if (audioEngineRef.current && audioPlaying) {
+                if (audioEngineRef.current && audioEngineRef.current.isPlaying) {
                   audioEngineRef.current.playUniverseAmbient(newSection);
                 }
               }
