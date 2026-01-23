@@ -34,6 +34,13 @@ import debugManager from './utils/DebugManager.js';
 // Import data
 import { universeData } from './data/universes.js';
 
+// Import post-processing
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { VignetteShader, ChromaticAberrationShader, FilmGrainShader } from './shaders/postProcessingShaders.js';
+
 gsap.registerPlugin(ScrollTrigger);
 
 function App() {
@@ -51,6 +58,7 @@ function App() {
   const [physicsLoaded, setPhysicsLoaded] = useState(false);
   const [isLoadingPhysics, setIsLoadingPhysics] = useState(false);
   const [debugPanelVisible, setDebugPanelVisible] = useState(false);
+  const [postProcessingEnabled, setPostProcessingEnabled] = useState(true);
 
   // Refs for Three.js and physics
   const canvasRef = useRef(null);
@@ -71,6 +79,13 @@ function App() {
   const starFieldRef = useRef(null);
   const nebulaRef = useRef(null);
   const ringsRef = useRef([]);
+
+  // Refs for post-processing
+  const composerRef = useRef(null);
+  const bloomPassRef = useRef(null);
+  const chromaticAberrationPassRef = useRef(null);
+  const filmGrainPassRef = useRef(null);
+  const vignettePassRef = useRef(null);
 
   // Refs for engines and interaction
   const RAPIERRef = useRef(null);
@@ -98,6 +113,60 @@ function App() {
     setTimeout(() => setModeIndicatorVisible(false), 1500);
   };
 
+  // Update post-processing effects based on universe
+  const updatePostProcessingForUniverse = (section) => {
+    if (!postProcessingEnabled || !bloomPassRef.current || !chromaticAberrationPassRef.current) return;
+
+    // Universe-specific post-processing profiles
+    const profiles = [
+      // 0: Genesis - Intense bloom, minimal aberration (purity, birth)
+      { bloom: 1.5, aberration: 0.001, grain: 0.08 },
+      // 1: Nebula - High bloom, moderate aberration (cosmic clouds)
+      { bloom: 1.3, aberration: 0.0015, grain: 0.12 },
+      // 2: Plasma - Maximum bloom, high aberration (energy)
+      { bloom: 1.8, aberration: 0.002, grain: 0.1 },
+      // 3: Stellar Forge - Strong bloom (bright stars)
+      { bloom: 1.6, aberration: 0.0012, grain: 0.11 },
+      // 4: Fractal - Moderate effects (geometric clarity)
+      { bloom: 1.0, aberration: 0.001, grain: 0.09 },
+      // 5: Asteroids - Reduced bloom (dark rocks)
+      { bloom: 0.8, aberration: 0.0008, grain: 0.15 },
+      // 6: Cosmic Ocean - Flowing bloom (liquid light)
+      { bloom: 1.2, aberration: 0.0018, grain: 0.1 },
+      // 7: Aurora - High bloom, subtle aberration (magnetic dance)
+      { bloom: 1.4, aberration: 0.0013, grain: 0.08 },
+      // 8: Vortex - Maximum aberration (distortion)
+      { bloom: 1.1, aberration: 0.0025, grain: 0.12 },
+      // 9: Glitch - Extreme aberration (quantum anomaly)
+      { bloom: 0.9, aberration: 0.003, grain: 0.18 },
+      // 10: Singularity - Inverted bloom, max aberration (black hole)
+      { bloom: 0.6, aberration: 0.0035, grain: 0.2 }
+    ];
+
+    const profile = profiles[section];
+
+    // Animate transitions
+    gsap.to(bloomPassRef.current, {
+      strength: profile.bloom,
+      duration: 1.5,
+      ease: 'power2.inOut'
+    });
+
+    gsap.to(chromaticAberrationPassRef.current.uniforms.amount, {
+      value: profile.aberration,
+      duration: 1.5,
+      ease: 'power2.inOut'
+    });
+
+    if (filmGrainPassRef.current) {
+      gsap.to(filmGrainPassRef.current.uniforms.intensity, {
+        value: profile.grain,
+        duration: 1.5,
+        ease: 'power2.inOut'
+      });
+    }
+  };
+
   // Update UI based on current section
   const updateUI = (section) => {
     setCurrentSection(section);
@@ -105,6 +174,7 @@ function App() {
     if (radarRef.current) {
       radarRef.current.setColor(universeData[section].color);
     }
+    updatePostProcessingForUniverse(section);
   };
 
   // Update grid color
@@ -394,7 +464,18 @@ function App() {
     }
 
     cameraRef.current.lookAt(0, 3, 0);
-    rendererRef.current.render(sceneRef.current, cameraRef.current);
+
+    // Use post-processing composer if enabled, otherwise direct render
+    if (postProcessingEnabled && composerRef.current) {
+      // Update film grain time
+      if (filmGrainPassRef.current) {
+        filmGrainPassRef.current.uniforms.time.value = timeRef.current;
+      }
+      composerRef.current.render();
+    } else {
+      rendererRef.current.render(sceneRef.current, cameraRef.current);
+    }
+
     animationFrameRef.current = requestAnimationFrame(animate);
   };
 
@@ -436,6 +517,48 @@ function App() {
           debugManager.error('Init', 'Canvas ref is null!', new Error('canvasRef.current is null'));
         }
         rendererRef.current = renderer;
+
+        // Post-processing setup
+        debugManager.log('Init', 'Setting up post-processing...');
+        const composer = new EffectComposer(renderer);
+
+        // 1. Render Pass (base scene)
+        const renderPass = new RenderPass(scene, camera);
+        composer.addPass(renderPass);
+
+        // 2. Bloom Pass (glowing effects)
+        const bloomPass = new UnrealBloomPass(
+          new THREE.Vector2(window.innerWidth, window.innerHeight),
+          1.2,    // strength
+          0.4,    // radius
+          0.85    // threshold
+        );
+        composer.addPass(bloomPass);
+        bloomPassRef.current = bloomPass;
+
+        // 3. Chromatic Aberration Pass
+        const chromaticAberrationPass = new ShaderPass(ChromaticAberrationShader);
+        chromaticAberrationPass.uniforms.amount.value = 0.0015;
+        composer.addPass(chromaticAberrationPass);
+        chromaticAberrationPassRef.current = chromaticAberrationPass;
+
+        // 4. Film Grain Pass
+        const filmGrainPass = new ShaderPass(FilmGrainShader);
+        filmGrainPass.uniforms.intensity.value = 0.12;
+        composer.addPass(filmGrainPass);
+        filmGrainPassRef.current = filmGrainPass;
+
+        // 5. Vignette Pass
+        const vignettePass = new ShaderPass(VignetteShader);
+        vignettePass.uniforms.offset.value = 0.95;
+        vignettePass.uniforms.darkness.value = 1.6;
+        composer.addPass(vignettePass);
+        vignettePassRef.current = vignettePass;
+
+        composerRef.current = composer;
+        debugManager.log('Init', 'Post-processing initialized', {
+          passes: ['Render', 'Bloom', 'ChromaticAberration', 'FilmGrain', 'Vignette']
+        });
 
         // Lights
         const mainLight = new THREE.PointLight(0x00ffc8, 300);
@@ -720,6 +843,11 @@ function App() {
           camera.aspect = window.innerWidth / window.innerHeight;
           camera.updateProjectionMatrix();
           renderer.setSize(window.innerWidth, window.innerHeight);
+
+          // Update composer size
+          if (composer) {
+            composer.setSize(window.innerWidth, window.innerHeight);
+          }
         };
 
         window.addEventListener('resize', handleResize);
