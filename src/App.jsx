@@ -75,6 +75,7 @@ function App() {
   // Refs for engines and interaction
   const RAPIERRef = useRef(null);
   const groundBodyCreatedRef = useRef(false);
+  const isCreatingBodyRef = useRef(false); // Prevent concurrent access to Rapier world
   const audioEngineRef = useRef(null);
   const radarRef = useRef(null);
   const radarInitializedRef = useRef(false);
@@ -134,58 +135,77 @@ function App() {
   const spawnObject = async (x, y) => {
     if (!sceneRef.current) return;
 
-    // Load physics on first object creation (lazy loading)
-    if (!RAPIERRef.current) {
-      const RAPIER = await loadPhysics();
-      if (!RAPIER) return; // Failed to load
-
-      // Initialize physics world
-      const world = new RAPIER.World({ x: 0, y: gravityInverted ? 9.81 : -9.81, z: 0 });
-      worldRef.current = world;
-
-      // Create ground body (only once)
-      const groundBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -2, 0));
-      world.createCollider(RAPIER.ColliderDesc.cuboid(25, 0.5, 25), groundBody);
-      groundBodyCreatedRef.current = true;
+    // Prevent concurrent access to Rapier world
+    if (isCreatingBodyRef.current) {
+      debugManager.log('Physics', 'Spawn blocked - already creating body');
+      return;
     }
 
-    if (!worldRef.current) return;
+    isCreatingBodyRef.current = true;
 
-    const cosmicObject = objectCreators[currentSection]();
-    sceneRef.current.add(cosmicObject);
+    try {
+      // Load physics on first object creation (lazy loading)
+      if (!RAPIERRef.current) {
+        const RAPIER = await loadPhysics();
+        if (!RAPIER) {
+          isCreatingBodyRef.current = false;
+          return; // Failed to load
+        }
 
-    const mouseXNorm = (x / window.innerWidth) * 2 - 1;
-    const mouseYNorm = -(y / window.innerHeight) * 2 + 1;
-    const spawnX = mouseXNorm * 12;
-    const spawnZ = mouseYNorm * 8;
+        // Initialize physics world
+        const world = new RAPIER.World({ x: 0, y: gravityInverted ? 9.81 : -9.81, z: 0 });
+        worldRef.current = world;
 
-    const RAPIER = RAPIERRef.current;
-    const body = worldRef.current.createRigidBody(
-      RAPIER.RigidBodyDesc.dynamic()
-        .setTranslation(spawnX, 25, spawnZ)
-        .setAngvel({ x: (Math.random() - 0.5) * 3, y: (Math.random() - 0.5) * 3, z: (Math.random() - 0.5) * 3 })
-    );
+        // Create ground body (only once)
+        const groundBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -2, 0));
+        world.createCollider(RAPIER.ColliderDesc.cuboid(25, 0.5, 25), groundBody);
+        groundBodyCreatedRef.current = true;
+      }
 
-    worldRef.current.createCollider(RAPIER.ColliderDesc.ball(0.5), body);
+      if (!worldRef.current) {
+        isCreatingBodyRef.current = false;
+        return;
+      }
 
-    bodiesRef.current.push({
-      mesh: cosmicObject,
-      body,
-      type: currentSection,
-      birthTime: Date.now()
-    });
+      const cosmicObject = objectCreators[currentSection]();
+      sceneRef.current.add(cosmicObject);
 
-    gsap.from(cosmicObject.scale, {
-      x: 0, y: 0, z: 0,
-      duration: 0.5,
-      ease: "elastic.out(1, 0.4)"
-    });
+      const mouseXNorm = (x / window.innerWidth) * 2 - 1;
+      const mouseYNorm = -(y / window.innerHeight) * 2 + 1;
+      const spawnX = mouseXNorm * 12;
+      const spawnZ = mouseYNorm * 8;
 
-    setObjectCount(bodiesRef.current.length);
-    createClickRipple(x, y);
+      const RAPIER = RAPIERRef.current;
+      const body = worldRef.current.createRigidBody(
+        RAPIER.RigidBodyDesc.dynamic()
+          .setTranslation(spawnX, 25, spawnZ)
+          .setAngvel({ x: (Math.random() - 0.5) * 3, y: (Math.random() - 0.5) * 3, z: (Math.random() - 0.5) * 3 })
+      );
 
-    if (audioEngineRef.current && audioPlaying) {
-      audioEngineRef.current.playSpawnSound(currentSection);
+      worldRef.current.createCollider(RAPIER.ColliderDesc.ball(0.5), body);
+
+      bodiesRef.current.push({
+        mesh: cosmicObject,
+        body,
+        type: currentSection,
+        birthTime: Date.now()
+      });
+
+      gsap.from(cosmicObject.scale, {
+        x: 0, y: 0, z: 0,
+        duration: 0.5,
+        ease: "elastic.out(1, 0.4)"
+      });
+
+      setObjectCount(bodiesRef.current.length);
+      createClickRipple(x, y);
+
+      if (audioEngineRef.current && audioPlaying) {
+        audioEngineRef.current.playSpawnSound(currentSection);
+      }
+    } finally {
+      // Always release the lock
+      isCreatingBodyRef.current = false;
     }
   };
 
@@ -224,6 +244,12 @@ function App() {
   // Clear all objects
   const clearAllObjects = () => {
     if (!sceneRef.current || !worldRef.current) return;
+
+    // Don't clear while creating a body
+    if (isCreatingBodyRef.current) {
+      debugManager.log('Physics', 'Clear blocked - currently creating body');
+      return;
+    }
 
     bodiesRef.current.forEach(b => {
       sceneRef.current.remove(b.mesh);
@@ -267,13 +293,13 @@ function App() {
     const dt = timeWarpRef.current ? 0.004 : 0.016;
     timeRef.current += dt;
 
-    // Only step physics if loaded
-    if (worldRef.current) {
+    // Only step physics if loaded AND not currently creating a body
+    if (worldRef.current && !isCreatingBodyRef.current) {
       worldRef.current.step();
     }
 
-    // Attract mode - only if physics loaded
-    if (attractModeRef.current && worldRef.current && bodiesRef.current.length > 0) {
+    // Attract mode - only if physics loaded and not creating body
+    if (attractModeRef.current && worldRef.current && !isCreatingBodyRef.current && bodiesRef.current.length > 0) {
       const attractPoint = new THREE.Vector3(
         (mouseXRef.current / window.innerWidth) * 2 - 1,
         0,
@@ -290,8 +316,8 @@ function App() {
       });
     }
 
-    // Update physics bodies - only if physics loaded
-    if (worldRef.current && bodiesRef.current.length > 0) {
+    // Update physics bodies - only if physics loaded and not creating body
+    if (worldRef.current && !isCreatingBodyRef.current && bodiesRef.current.length > 0) {
       bodiesRef.current.forEach((b, index) => {
       const p = b.body.translation();
       const r = b.body.rotation();
@@ -361,8 +387,8 @@ function App() {
       gridGroupRef.current.position.z *= 0.9;
     }
 
-    // Update radar - only if physics loaded (needs bodies)
-    if (radarVisibleRef.current && radarRef.current && worldRef.current) {
+    // Update radar - only if physics loaded and not creating body (needs bodies)
+    if (radarVisibleRef.current && radarRef.current && worldRef.current && !isCreatingBodyRef.current) {
       radarRef.current.update(bodiesRef.current, Date.now());
       radarRef.current.draw();
     }
