@@ -69,6 +69,7 @@ function App() {
 
   // Refs for engines and interaction
   const RAPIERRef = useRef(null);
+  const groundBodyCreatedRef = useRef(false);
   const audioEngineRef = useRef(null);
   const radarRef = useRef(null);
   const mouseXRef = useRef(0);
@@ -135,6 +136,11 @@ function App() {
       // Initialize physics world
       const world = new RAPIER.World({ x: 0, y: gravityInverted ? 9.81 : -9.81, z: 0 });
       worldRef.current = world;
+
+      // Create ground body (only once)
+      const groundBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -2, 0));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(25, 0.5, 25), groundBody);
+      groundBodyCreatedRef.current = true;
     }
 
     if (!worldRef.current) return;
@@ -399,9 +405,7 @@ function App() {
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
         scene.add(ambientLight);
 
-        // Ground physics
-        const groundBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -2, 0));
-        world.createCollider(RAPIER.ColliderDesc.cuboid(25, 0.5, 25), groundBody);
+        // Note: Ground physics body will be created when physics engine loads (on first click)
 
         // Grid
         const gridGroup = new THREE.Group();
@@ -643,13 +647,13 @@ function App() {
 
         mainTimeline.to({}, {
           duration: 0.01,
-          onStart: () => { if (!gravityInverted && world) world.gravity = { x: 0, y: -2, z: 0 }; },
-          onReverseComplete: () => { if (!gravityInverted && world) world.gravity = { x: 0, y: -9.81, z: 0 }; }
+          onStart: () => { if (!gravityInverted && worldRef.current) worldRef.current.gravity = { x: 0, y: -2, z: 0 }; },
+          onReverseComplete: () => { if (!gravityInverted && worldRef.current) worldRef.current.gravity = { x: 0, y: -9.81, z: 0 }; }
         }, sectionDuration * 6);
 
         mainTimeline.to({}, {
           duration: 0.01,
-          onStart: () => { if (!gravityInverted && world) world.gravity = { x: 0, y: -9.81, z: 0 }; }
+          onStart: () => { if (!gravityInverted && worldRef.current) worldRef.current.gravity = { x: 0, y: -9.81, z: 0 }; }
         }, sectionDuration * 7);
 
         mainTimeline.to({}, {
