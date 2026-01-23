@@ -1,24 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import RAPIER from '@dimforge/rapier3d-compat';
 
-// Import all components
+// Critical components - loaded immediately
 import CustomCursor from './components/CustomCursor.jsx';
 import ProgressBar from './components/ProgressBar.jsx';
 import SectionIndicator from './components/SectionIndicator.jsx';
 import UniverseName from './components/UniverseName.jsx';
 import ChapterNumber from './components/ChapterNumber.jsx';
 import ObjectCounter from './components/ObjectCounter.jsx';
-import ControlPanel from './components/ControlPanel.jsx';
-import ModeIndicator from './components/ModeIndicator.jsx';
-import AudioVisualizer from './components/AudioVisualizer.jsx';
-import VolumeControl from './components/VolumeControl.jsx';
-import Radar from './components/Radar.jsx';
 import Instructions from './components/Instructions.jsx';
 import Section from './components/Section.jsx';
 import Card from './components/Card.jsx';
+import LoadingFallback from './components/LoadingFallback.jsx';
+
+// Non-critical components - lazy loaded
+const ControlPanel = lazy(() => import('./components/ControlPanel.jsx'));
+const ModeIndicator = lazy(() => import('./components/ModeIndicator.jsx'));
+const AudioVisualizer = lazy(() => import('./components/AudioVisualizer.jsx'));
+const VolumeControl = lazy(() => import('./components/VolumeControl.jsx'));
+const Radar = lazy(() => import('./components/Radar.jsx'));
 
 // Import engines
 import CosmicAudioEngine from './engines/audioEngine.js';
@@ -42,6 +44,8 @@ function App() {
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [modeIndicatorText, setModeIndicatorText] = useState('');
   const [modeIndicatorVisible, setModeIndicatorVisible] = useState(false);
+  const [physicsLoaded, setPhysicsLoaded] = useState(false);
+  const [isLoadingPhysics, setIsLoadingPhysics] = useState(false);
 
   // Refs for Three.js and physics
   const canvasRef = useRef(null);
@@ -64,6 +68,7 @@ function App() {
   const ringsRef = useRef([]);
 
   // Refs for engines and interaction
+  const RAPIERRef = useRef(null);
   const audioEngineRef = useRef(null);
   const radarRef = useRef(null);
   const mouseXRef = useRef(0);
@@ -119,8 +124,20 @@ function App() {
   };
 
   // Spawn cosmic object
-  const spawnObject = (x, y) => {
-    if (!sceneRef.current || !worldRef.current) return;
+  const spawnObject = async (x, y) => {
+    if (!sceneRef.current) return;
+
+    // Load physics on first object creation (lazy loading)
+    if (!RAPIERRef.current) {
+      const RAPIER = await loadPhysics();
+      if (!RAPIER) return; // Failed to load
+
+      // Initialize physics world
+      const world = new RAPIER.World({ x: 0, y: gravityInverted ? 9.81 : -9.81, z: 0 });
+      worldRef.current = world;
+    }
+
+    if (!worldRef.current) return;
 
     const cosmicObject = objectCreators[currentSection]();
     sceneRef.current.add(cosmicObject);
@@ -130,6 +147,7 @@ function App() {
     const spawnX = mouseXNorm * 12;
     const spawnZ = mouseYNorm * 8;
 
+    const RAPIER = RAPIERRef.current;
     const body = worldRef.current.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(spawnX, 25, spawnZ)
@@ -339,10 +357,8 @@ function App() {
 
     const initApp = async () => {
       try {
-        // Initialize RAPIER
-        await RAPIER.init();
-        const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
-        worldRef.current = world;
+        // Note: RAPIER will be loaded on demand (first click)
+        // This speeds up initial page load by ~2MB!
 
         // Three.js setup
         const scene = new THREE.Scene();
@@ -698,6 +714,37 @@ function App() {
     radarVisibleRef.current = radarVisible;
   }, [radarVisible]);
 
+  // Load physics engine dynamically (lazy loading)
+  const loadPhysics = async () => {
+    if (RAPIERRef.current) return RAPIERRef.current;
+
+    if (isLoadingPhysics) {
+      // Wait for current loading to finish
+      while (!RAPIERRef.current) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      return RAPIERRef.current;
+    }
+
+    setIsLoadingPhysics(true);
+    showModeIndicator('CHARGEMENT PHYSIQUE...');
+
+    try {
+      const RAPIER = await import('@dimforge/rapier3d-compat');
+      await RAPIER.default.init();
+      RAPIERRef.current = RAPIER.default;
+      setPhysicsLoaded(true);
+      setIsLoadingPhysics(false);
+      showModeIndicator('PHYSIQUE ACTIVÉE');
+      return RAPIER.default;
+    } catch (error) {
+      console.error('Failed to load physics engine:', error);
+      setIsLoadingPhysics(false);
+      showModeIndicator('ERREUR PHYSIQUE');
+      return null;
+    }
+  };
+
   // Keyboard event handlers
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -803,61 +850,71 @@ function App() {
       <ObjectCounter count={objectCount} />
 
       {/* Control Panel */}
-      <ControlPanel
-        gravityInverted={gravityInverted}
-        attractMode={attractMode}
-        timeWarp={timeWarp}
-        radarVisible={radarVisible}
-        audioPlaying={audioPlaying}
-        onGravityToggle={() => {
-          setGravityInverted(prev => {
-            const newValue = !prev;
-            showModeIndicator(newValue ? 'GRAVITÉ INVERSÉE' : 'GRAVITÉ NORMALE');
-            return newValue;
-          });
-        }}
-        onAttractToggle={() => {
-          setAttractMode(prev => {
-            const newValue = !prev;
-            showModeIndicator(newValue ? 'MODE ATTRACTION' : 'MODE NORMAL');
-            return newValue;
-          });
-        }}
-        onTimeWarpToggle={() => {
-          setTimeWarp(prev => {
-            const newValue = !prev;
-            showModeIndicator(newValue ? 'RALENTI TEMPOREL' : 'TEMPS NORMAL');
-            return newValue;
-          });
-        }}
-        onRadarToggle={() => setRadarVisible(prev => !prev)}
-        onAudioToggle={toggleAudio}
-        onClear={clearAllObjects}
-      />
+      <Suspense fallback={<LoadingFallback />}>
+        <ControlPanel
+          gravityInverted={gravityInverted}
+          attractMode={attractMode}
+          timeWarp={timeWarp}
+          radarVisible={radarVisible}
+          audioPlaying={audioPlaying}
+          onGravityToggle={() => {
+            setGravityInverted(prev => {
+              const newValue = !prev;
+              showModeIndicator(newValue ? 'GRAVITÉ INVERSÉE' : 'GRAVITÉ NORMALE');
+              return newValue;
+            });
+          }}
+          onAttractToggle={() => {
+            setAttractMode(prev => {
+              const newValue = !prev;
+              showModeIndicator(newValue ? 'MODE ATTRACTION' : 'MODE NORMAL');
+              return newValue;
+            });
+          }}
+          onTimeWarpToggle={() => {
+            setTimeWarp(prev => {
+              const newValue = !prev;
+              showModeIndicator(newValue ? 'RALENTI TEMPOREL' : 'TEMPS NORMAL');
+              return newValue;
+            });
+          }}
+          onRadarToggle={() => setRadarVisible(prev => !prev)}
+          onAudioToggle={toggleAudio}
+          onClear={clearAllObjects}
+        />
+      </Suspense>
 
       {/* Mode Indicator */}
-      <ModeIndicator text={modeIndicatorText} visible={modeIndicatorVisible} />
+      <Suspense fallback={<LoadingFallback />}>
+        <ModeIndicator text={modeIndicatorText} visible={modeIndicatorVisible} />
+      </Suspense>
 
       {/* Radar */}
-      <Radar visible={radarVisible} />
+      <Suspense fallback={<LoadingFallback />}>
+        <Radar visible={radarVisible} />
+      </Suspense>
 
       {/* Audio Controls Container */}
       <div className={`audio-controls-container ${audioPlaying ? 'visible' : ''}`}>
         {/* Audio Visualizer */}
-        <AudioVisualizer
-          playing={audioPlaying}
-          analyser={audioEngineRef.current?.analyser || null}
-        />
+        <Suspense fallback={<LoadingFallback />}>
+          <AudioVisualizer
+            playing={audioPlaying}
+            analyser={audioEngineRef.current?.analyser || null}
+          />
+        </Suspense>
 
         {/* Volume Control */}
-        <VolumeControl
-          visible={audioPlaying}
-          onVolumeChange={(value) => {
-            if (audioEngineRef.current) {
-              audioEngineRef.current.setVolume(value / 100);
-            }
-          }}
-        />
+        <Suspense fallback={<LoadingFallback />}>
+          <VolumeControl
+            visible={audioPlaying}
+            onVolumeChange={(value) => {
+              if (audioEngineRef.current) {
+                audioEngineRef.current.setVolume(value / 100);
+              }
+            }}
+          />
+        </Suspense>
       </div>
 
       {/* Section Indicator */}
