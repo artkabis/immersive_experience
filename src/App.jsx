@@ -72,6 +72,7 @@ function App() {
   const groundBodyCreatedRef = useRef(false);
   const audioEngineRef = useRef(null);
   const radarRef = useRef(null);
+  const radarInitializedRef = useRef(false);
   const mouseXRef = useRef(0);
   const mouseYRef = useRef(0);
   const isMouseDownRef = useRef(false);
@@ -602,9 +603,7 @@ function App() {
         await audioEngine.init();
         audioEngineRef.current = audioEngine;
 
-        // Initialize radar
-        const radar = new CosmicRadar('radarCanvas');
-        radarRef.current = radar;
+        // Note: Radar will be initialized on first activation (lazy loading)
 
         // GSAP ScrollTrigger
         const totalSections = 11;
@@ -716,7 +715,21 @@ function App() {
 
   useEffect(() => {
     radarVisibleRef.current = radarVisible;
-  }, [radarVisible]);
+
+    // Initialize radar on first activation (lazy loading)
+    if (radarVisible && !radarInitializedRef.current) {
+      // Wait a bit for the lazy-loaded Radar component to mount
+      setTimeout(() => {
+        const radarCanvas = document.getElementById('radarCanvas');
+        if (radarCanvas && !radarRef.current) {
+          const radar = new CosmicRadar('radarCanvas');
+          radar.setColor(universeData[currentSection].color);
+          radarRef.current = radar;
+          radarInitializedRef.current = true;
+        }
+      }, 100);
+    }
+  }, [radarVisible, currentSection]);
 
   // Load physics engine dynamically (lazy loading)
   const loadPhysics = async () => {
