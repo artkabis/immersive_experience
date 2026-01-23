@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const Radar = ({ isVisible = false, universeColor = '#00ffc8' }) => {
+const Radar = ({ visible = false, universeColor = '#00ffc8' }) => {
   const canvasRef = useRef(null);
   const [radarData, setRadarData] = useState({
     objectCount: 0,
@@ -93,19 +93,19 @@ const Radar = ({ isVisible = false, universeColor = '#00ffc8' }) => {
       ctx.globalAlpha = 1;
       ctx.lineWidth = 1;
 
-      if (isVisible) {
+      if (visible) {
         requestAnimationFrame(updateRadar);
       }
     };
 
-    if (isVisible) {
+    if (visible) {
       updateRadar();
     }
-  }, [isVisible, universeColor]);
+  }, [visible, universeColor]);
 
   return (
     <div
-      className={`radar-container ${isVisible ? 'visible' : ''}`}
+      className={`radar-container ${visible ? 'visible' : ''}`}
       id="radarContainer"
     >
       <div className="radar-stats" id="radarStats">

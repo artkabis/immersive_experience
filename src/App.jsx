@@ -73,6 +73,11 @@ function App() {
   const animationFrameRef = useRef(null);
   const timeRef = useRef(0);
 
+  // Refs for animation loop state (avoid closure issues)
+  const timeWarpRef = useRef(false);
+  const attractModeRef = useRef(false);
+  const radarVisibleRef = useRef(false);
+
   // Show mode indicator
   const showModeIndicator = (text) => {
     setModeIndicatorText(text);
@@ -225,13 +230,13 @@ function App() {
   const animate = () => {
     if (!worldRef.current || !sceneRef.current || !cameraRef.current || !rendererRef.current) return;
 
-    const dt = timeWarp ? 0.004 : 0.016;
+    const dt = timeWarpRef.current ? 0.004 : 0.016;
     timeRef.current += dt;
 
     worldRef.current.step();
 
     // Attract mode
-    if (attractMode) {
+    if (attractModeRef.current) {
       const attractPoint = new THREE.Vector3(
         (mouseXRef.current / window.innerWidth) * 2 - 1,
         0,
@@ -318,7 +323,7 @@ function App() {
     }
 
     // Update radar
-    if (radarVisible && radarRef.current) {
+    if (radarVisibleRef.current && radarRef.current) {
       radarRef.current.update(bodiesRef.current, Date.now());
       radarRef.current.draw();
     }
@@ -680,6 +685,19 @@ function App() {
     }
   }, [gravityInverted]);
 
+  // Sync refs with states for animation loop (avoid closure issues)
+  useEffect(() => {
+    timeWarpRef.current = timeWarp;
+  }, [timeWarp]);
+
+  useEffect(() => {
+    attractModeRef.current = attractMode;
+  }, [attractMode]);
+
+  useEffect(() => {
+    radarVisibleRef.current = radarVisible;
+  }, [radarVisible]);
+
   // Keyboard event handlers
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -823,21 +841,24 @@ function App() {
       {/* Radar */}
       <Radar visible={radarVisible} />
 
-      {/* Volume Control */}
-      <VolumeControl
-        visible={audioPlaying}
-        onVolumeChange={(value) => {
-          if (audioEngineRef.current) {
-            audioEngineRef.current.setVolume(value / 100);
-          }
-        }}
-      />
+      {/* Audio Controls Container */}
+      <div className={`audio-controls-container ${audioPlaying ? 'visible' : ''}`}>
+        {/* Audio Visualizer */}
+        <AudioVisualizer
+          playing={audioPlaying}
+          analyser={audioEngineRef.current?.analyser || null}
+        />
 
-      {/* Audio Visualizer */}
-      <AudioVisualizer
-        playing={audioPlaying}
-        analyser={audioEngineRef.current?.analyser || null}
-      />
+        {/* Volume Control */}
+        <VolumeControl
+          visible={audioPlaying}
+          onVolumeChange={(value) => {
+            if (audioEngineRef.current) {
+              audioEngineRef.current.setVolume(value / 100);
+            }
+          }}
+        />
+      </div>
 
       {/* Section Indicator */}
       <SectionIndicator
