@@ -21,11 +21,15 @@ const ModeIndicator = lazy(() => import('./components/ModeIndicator.jsx'));
 const AudioVisualizer = lazy(() => import('./components/AudioVisualizer.jsx'));
 const VolumeControl = lazy(() => import('./components/VolumeControl.jsx'));
 const Radar = lazy(() => import('./components/Radar.jsx'));
+const DebugPanel = lazy(() => import('./components/DebugPanel.jsx'));
 
 // Import engines
 import CosmicAudioEngine from './engines/audioEngine.js';
 import CosmicRadar from './engines/radarEngine.js';
 import objectCreators from './engines/objectCreators.js';
+
+// Import debug manager
+import debugManager from './utils/DebugManager.js';
 
 // Import data
 import { universeData } from './data/universes.js';
@@ -46,6 +50,7 @@ function App() {
   const [modeIndicatorVisible, setModeIndicatorVisible] = useState(false);
   const [physicsLoaded, setPhysicsLoaded] = useState(false);
   const [isLoadingPhysics, setIsLoadingPhysics] = useState(false);
+  const [debugPanelVisible, setDebugPanelVisible] = useState(false);
 
   // Refs for Three.js and physics
   const canvasRef = useRef(null);
@@ -255,6 +260,8 @@ function App() {
   const animate = () => {
     if (!worldRef.current || !sceneRef.current || !cameraRef.current || !rendererRef.current) return;
 
+    debugManager.countFrame();
+
     const dt = timeWarpRef.current ? 0.004 : 0.016;
     timeRef.current += dt;
 
@@ -364,10 +371,13 @@ function App() {
 
     const initApp = async () => {
       try {
+        debugManager.log('Init', 'Starting application initialization');
+
         // Note: RAPIER will be loaded on demand (first click)
         // This speeds up initial page load by ~2MB!
 
         // Three.js setup
+        debugManager.log('Init', 'Creating Three.js scene');
         const scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x000000, 0.012);
         sceneRef.current = scene;
@@ -384,6 +394,13 @@ function App() {
 
         if (canvasRef.current) {
           canvasRef.current.appendChild(renderer.domElement);
+          debugManager.log('Init', 'Renderer attached to DOM', {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            pixelRatio: renderer.getPixelRatio()
+          });
+        } else {
+          debugManager.error('Init', 'Canvas ref is null!', new Error('canvasRef.current is null'));
         }
         rendererRef.current = renderer;
 
@@ -599,9 +616,12 @@ function App() {
         ringsRef.current = rings;
 
         // Initialize audio engine
+        debugManager.log('Audio', 'Initializing audio engine...');
         const audioEngine = new CosmicAudioEngine();
         await audioEngine.init();
         audioEngineRef.current = audioEngine;
+        debugManager.updatePerformance({ audioLoaded: true });
+        debugManager.log('Audio', 'Audio engine initialized');
 
         // Note: Radar will be initialized on first activation (lazy loading)
 
@@ -674,6 +694,12 @@ function App() {
         // Start animation loop
         if (isMounted) {
           animate();
+          debugManager.log('Init', 'Application initialized successfully', {
+            scene: !!scene,
+            camera: !!camera,
+            renderer: !!renderer,
+            universes: universeData.length
+          });
         }
 
         // Cleanup function
@@ -691,11 +717,31 @@ function App() {
 
       } catch (error) {
         console.error("Initialization error:", error);
+        debugManager.error('Init', 'Application initialization failed', error);
       }
     };
 
     initApp();
   }, []); // Only run once on mount
+
+  // Track object count changes
+  useEffect(() => {
+    debugManager.updatePerformance({ objectCount });
+  }, [objectCount]);
+
+  // Keyboard shortcut for debug panel (Ctrl+D or Cmd+D)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault();
+        setDebugPanelVisible(prev => !prev);
+        debugManager.log('Debug', `Debug panel ${!debugPanelVisible ? 'opened' : 'closed'}`);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [debugPanelVisible]);
 
   // Update gravity when gravityInverted changes
   useEffect(() => {
@@ -718,6 +764,7 @@ function App() {
 
     // Initialize radar on first activation (lazy loading)
     if (radarVisible && !radarInitializedRef.current) {
+      debugManager.log('Radar', 'Initializing radar...');
       // Wait a bit for the lazy-loaded Radar component to mount
       setTimeout(() => {
         const radarCanvas = document.getElementById('radarCanvas');
@@ -726,6 +773,8 @@ function App() {
           radar.setColor(universeData[currentSection].color);
           radarRef.current = radar;
           radarInitializedRef.current = true;
+          debugManager.updatePerformance({ radarLoaded: true });
+          debugManager.log('Radar', 'Radar initialized successfully');
         }
       }, 100);
     }
@@ -745,6 +794,9 @@ function App() {
 
     setIsLoadingPhysics(true);
     showModeIndicator('CHARGEMENT PHYSIQUE...');
+    debugManager.log('Physics', 'Starting physics engine load');
+
+    const startTime = performance.now();
 
     try {
       const RAPIER = await import('@dimforge/rapier3d-compat');
@@ -752,10 +804,17 @@ function App() {
       RAPIERRef.current = RAPIER.default;
       setPhysicsLoaded(true);
       setIsLoadingPhysics(false);
+
+      const loadTime = Math.round(performance.now() - startTime);
+      debugManager.trackLazyLoad('RAPIER Physics', loadTime);
+      debugManager.updatePerformance({ physicsLoaded: true });
+      debugManager.log('Physics', `Physics engine loaded in ${loadTime}ms`);
+
       showModeIndicator('PHYSIQUE ACTIVÉE');
       return RAPIER.default;
     } catch (error) {
       console.error('Failed to load physics engine:', error);
+      debugManager.error('Physics', 'Failed to load physics engine', error);
       setIsLoadingPhysics(false);
       showModeIndicator('ERREUR PHYSIQUE');
       return null;
@@ -968,6 +1027,11 @@ function App() {
 
       {/* Instructions */}
       <Instructions />
+
+      {/* Debug Panel (Ctrl+D / Cmd+D to toggle) */}
+      <Suspense fallback={null}>
+        <DebugPanel visible={debugPanelVisible} />
+      </Suspense>
     </>
   );
 }
