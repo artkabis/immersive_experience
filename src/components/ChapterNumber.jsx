@@ -1,26 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
-const ChapterNumber = () => {
-  const [chapterNum, setChapterNum] = useState('01');
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollPercent = window.scrollY / (document.documentElement.scrollHeight - window.innerHeight);
-      const sectionIndex = Math.min(
-        Math.floor(scrollPercent * 11),
-        10
-      );
-      const formattedNum = String(sectionIndex + 1).padStart(2, '0');
-      setChapterNum(formattedNum);
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+const ChapterNumber = ({ number = 1 }) => {
+  const formattedNum = String(number).padStart(2, '0');
 
   return (
     <div className="chapter-number" id="chapterNumber">
-      {chapterNum}
+      {formattedNum}
     </div>
   );
 };

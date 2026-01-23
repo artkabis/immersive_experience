@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
-const SectionIndicator = ({ totalSections = 11, onSectionClick = null }) => {
-  const [activeSection, setActiveSection] = useState(0);
-
+const SectionIndicator = ({ currentSection = 0, totalSections = 11, onSectionClick = null }) => {
   const sectionNames = [
     'Genèse',
     'Nébuleuse',
@@ -16,20 +14,6 @@ const SectionIndicator = ({ totalSections = 11, onSectionClick = null }) => {
     'Glitch',
     'Singularité'
   ];
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollPercent = window.scrollY / (document.documentElement.scrollHeight - window.innerHeight);
-      const newSection = Math.min(
-        Math.floor(scrollPercent * totalSections),
-        totalSections - 1
-      );
-      setActiveSection(newSection);
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [totalSections]);
 
   const handleDotClick = (index) => {
     if (onSectionClick) {
@@ -46,7 +30,7 @@ const SectionIndicator = ({ totalSections = 11, onSectionClick = null }) => {
       {Array.from({ length: totalSections }).map((_, i) => (
         <div
           key={i}
-          className={`indicator-dot ${i === activeSection ? 'active' : ''}`}
+          className={`indicator-dot ${i === currentSection ? 'active' : ''}`}
           data-section={i}
           data-name={sectionNames[i]}
           onClick={() => handleDotClick(i)}
