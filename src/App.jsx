@@ -531,7 +531,7 @@ function App() {
           new THREE.Vector2(window.innerWidth, window.innerHeight),
           1.2,    // strength
           0.4,    // radius
-          0.85    // threshold
+          0.3     // threshold (ABAISSÉ de 0.85 à 0.3 pour scène plus lumineuse)
         );
         composer.addPass(bloomPass);
         bloomPassRef.current = bloomPass;
@@ -544,14 +544,14 @@ function App() {
 
         // 4. Film Grain Pass
         const filmGrainPass = new ShaderPass(FilmGrainShader);
-        filmGrainPass.uniforms.intensity.value = 0.12;
+        filmGrainPass.uniforms.intensity.value = 0.03; // RÉDUIT de 0.12 à 0.03 pour grain subtil
         composer.addPass(filmGrainPass);
         filmGrainPassRef.current = filmGrainPass;
 
         // 5. Vignette Pass
         const vignettePass = new ShaderPass(VignetteShader);
         vignettePass.uniforms.offset.value = 0.95;
-        vignettePass.uniforms.darkness.value = 1.6;
+        vignettePass.uniforms.darkness.value = 1.2; // RÉDUIT de 1.6 à 1.2 pour bords moins sombres
         composer.addPass(vignettePass);
         vignettePassRef.current = vignettePass;
 
