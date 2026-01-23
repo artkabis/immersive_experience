@@ -258,17 +258,22 @@ function App() {
 
   // Animation loop
   const animate = () => {
-    if (!worldRef.current || !sceneRef.current || !cameraRef.current || !rendererRef.current) return;
+    // Basic checks - only scene, camera, and renderer are required
+    // Physics (worldRef) is optional and loaded lazily
+    if (!sceneRef.current || !cameraRef.current || !rendererRef.current) return;
 
     debugManager.countFrame();
 
     const dt = timeWarpRef.current ? 0.004 : 0.016;
     timeRef.current += dt;
 
-    worldRef.current.step();
+    // Only step physics if loaded
+    if (worldRef.current) {
+      worldRef.current.step();
+    }
 
-    // Attract mode
-    if (attractModeRef.current) {
+    // Attract mode - only if physics loaded
+    if (attractModeRef.current && worldRef.current && bodiesRef.current.length > 0) {
       const attractPoint = new THREE.Vector3(
         (mouseXRef.current / window.innerWidth) * 2 - 1,
         0,
@@ -285,8 +290,9 @@ function App() {
       });
     }
 
-    // Update physics bodies
-    bodiesRef.current.forEach((b, index) => {
+    // Update physics bodies - only if physics loaded
+    if (worldRef.current && bodiesRef.current.length > 0) {
+      bodiesRef.current.forEach((b, index) => {
       const p = b.body.translation();
       const r = b.body.rotation();
       b.mesh.position.set(p.x, p.y, p.z);
@@ -329,14 +335,15 @@ function App() {
         if (b.mesh.children[2]) b.mesh.children[2].scale.setScalar(1 + Math.sin(timeRef.current * 3) * 0.2);
       }
 
-      // Remove objects that fell off or went too high
-      if (p.y < -30 || p.y > 50) {
-        sceneRef.current.remove(b.mesh);
-        worldRef.current.removeRigidBody(b.body);
-        bodiesRef.current.splice(index, 1);
-        setObjectCount(bodiesRef.current.length);
-      }
-    });
+        // Remove objects that fell off or went too high
+        if (p.y < -30 || p.y > 50) {
+          sceneRef.current.remove(b.mesh);
+          worldRef.current.removeRigidBody(b.body);
+          bodiesRef.current.splice(index, 1);
+          setObjectCount(bodiesRef.current.length);
+        }
+      });
+    }
 
     // Background animations
     if (starFieldRef.current) starFieldRef.current.rotation.y = timeRef.current * 0.015;
@@ -354,8 +361,8 @@ function App() {
       gridGroupRef.current.position.z *= 0.9;
     }
 
-    // Update radar
-    if (radarVisibleRef.current && radarRef.current) {
+    // Update radar - only if physics loaded (needs bodies)
+    if (radarVisibleRef.current && radarRef.current && worldRef.current) {
       radarRef.current.update(bodiesRef.current, Date.now());
       radarRef.current.draw();
     }
