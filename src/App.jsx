@@ -120,27 +120,27 @@ function App() {
     // Universe-specific post-processing profiles
     const profiles = [
       // 0: Genesis - Intense bloom, minimal aberration (purity, birth)
-      { bloom: 1.5, aberration: 0.001, grain: 0.08 },
+      { bloom: 0.9, aberration: 0.001, grain: 0.0 },
       // 1: Nebula - High bloom, moderate aberration (cosmic clouds)
-      { bloom: 1.3, aberration: 0.0015, grain: 0.12 },
+      { bloom: 0.8, aberration: 0.0015, grain: 0.0 },
       // 2: Plasma - Maximum bloom, high aberration (energy)
-      { bloom: 1.8, aberration: 0.002, grain: 0.1 },
+      { bloom: 1.1, aberration: 0.002, grain: 0.0 },
       // 3: Stellar Forge - Strong bloom (bright stars)
-      { bloom: 1.6, aberration: 0.0012, grain: 0.11 },
+      { bloom: 1.0, aberration: 0.0012, grain: 0.0 },
       // 4: Fractal - Moderate effects (geometric clarity)
-      { bloom: 1.0, aberration: 0.001, grain: 0.09 },
+      { bloom: 0.6, aberration: 0.001, grain: 0.0 },
       // 5: Asteroids - Reduced bloom (dark rocks)
-      { bloom: 0.8, aberration: 0.0008, grain: 0.15 },
+      { bloom: 0.5, aberration: 0.0008, grain: 0.0 },
       // 6: Cosmic Ocean - Flowing bloom (liquid light)
-      { bloom: 1.2, aberration: 0.0018, grain: 0.1 },
+      { bloom: 0.75, aberration: 0.0018, grain: 0.0 },
       // 7: Aurora - High bloom, subtle aberration (magnetic dance)
-      { bloom: 1.4, aberration: 0.0013, grain: 0.08 },
+      { bloom: 0.85, aberration: 0.0013, grain: 0.0 },
       // 8: Vortex - Maximum aberration (distortion)
-      { bloom: 1.1, aberration: 0.0025, grain: 0.12 },
+      { bloom: 0.7, aberration: 0.0025, grain: 0.0 },
       // 9: Glitch - Extreme aberration (quantum anomaly)
-      { bloom: 0.9, aberration: 0.003, grain: 0.18 },
+      { bloom: 0.55, aberration: 0.003, grain: 0.0 },
       // 10: Singularity - Inverted bloom, max aberration (black hole)
-      { bloom: 0.6, aberration: 0.0035, grain: 0.2 }
+      { bloom: 0.4, aberration: 0.0035, grain: 0.0 }
     ];
 
     const profile = profiles[section];
@@ -529,9 +529,9 @@ function App() {
         // 2. Bloom Pass (glowing effects)
         const bloomPass = new UnrealBloomPass(
           new THREE.Vector2(window.innerWidth, window.innerHeight),
-          1.2,    // strength
+          0.9,    // strength (RÉDUIT de 1.2 à 0.9 pour éviter éblouissement)
           0.4,    // radius
-          0.3     // threshold (ABAISSÉ de 0.85 à 0.3 pour scène plus lumineuse)
+          0.15    // threshold (ABAISSÉ de 0.3 à 0.15 pour scène beaucoup plus lumineuse)
         );
         composer.addPass(bloomPass);
         bloomPassRef.current = bloomPass;
@@ -544,14 +544,14 @@ function App() {
 
         // 4. Film Grain Pass
         const filmGrainPass = new ShaderPass(FilmGrainShader);
-        filmGrainPass.uniforms.intensity.value = 0.03; // RÉDUIT de 0.12 à 0.03 pour grain subtil
+        filmGrainPass.uniforms.intensity.value = 0.0; // DÉSACTIVÉ (valeur à 0 - grain supprimé)
         composer.addPass(filmGrainPass);
         filmGrainPassRef.current = filmGrainPass;
 
         // 5. Vignette Pass
         const vignettePass = new ShaderPass(VignetteShader);
         vignettePass.uniforms.offset.value = 0.95;
-        vignettePass.uniforms.darkness.value = 1.2; // RÉDUIT de 1.6 à 1.2 pour bords moins sombres
+        vignettePass.uniforms.darkness.value = 0.8; // RÉDUIT de 1.2 à 0.8 pour bords beaucoup plus clairs
         composer.addPass(vignettePass);
         vignettePassRef.current = vignettePass;
 
