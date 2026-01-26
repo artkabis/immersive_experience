@@ -22,14 +22,28 @@ const AudioVisualizer = lazy(() => import('./components/AudioVisualizer.jsx'));
 const VolumeControl = lazy(() => import('./components/VolumeControl.jsx'));
 const Radar = lazy(() => import('./components/Radar.jsx'));
 const DebugPanel = lazy(() => import('./components/DebugPanel.jsx'));
+const GraphicsSettings = lazy(() => import('./components/GraphicsSettings.jsx'));
 
 // Import engines
 import CosmicAudioEngine from './engines/audioEngine.js';
 import CosmicRadar from './engines/radarEngine.js';
 import objectCreators from './engines/objectCreators.js';
+import createOptimizedObjectCreators from './engines/optimizedObjectCreators.js';
 
 // Import debug manager
 import debugManager from './utils/DebugManager.js';
+
+// Import optimization systems
+import { getInitialSettings, applyPreset, saveSettings } from './utils/QualityPresets.js';
+import ObjectPool from './utils/ObjectPool.js';
+import PerformanceMonitor from './utils/PerformanceMonitor.js';
+import {
+  createInstancedStarField,
+  createInstancedNebula,
+  animateInstancedStarField,
+  animateInstancedNebula,
+  updateParticleCount
+} from './utils/InstancedParticles.js';
 
 // Import data
 import { universeData } from './data/universes.js';
@@ -59,6 +73,9 @@ function App() {
   const [isLoadingPhysics, setIsLoadingPhysics] = useState(false);
   const [debugPanelVisible, setDebugPanelVisible] = useState(false);
   const [postProcessingEnabled, setPostProcessingEnabled] = useState(true);
+  const [graphicsSettingsVisible, setGraphicsSettingsVisible] = useState(false);
+  const [graphicsSettings, setGraphicsSettings] = useState(() => getInitialSettings());
+  const [currentFPS, setCurrentFPS] = useState(60);
 
   // Refs for Three.js and physics
   const canvasRef = useRef(null);
@@ -79,6 +96,11 @@ function App() {
   const starFieldRef = useRef(null);
   const nebulaRef = useRef(null);
   const ringsRef = useRef([]);
+
+  // Refs for optimization systems
+  const objectPoolRef = useRef(null);
+  const performanceMonitorRef = useRef(null);
+  const optimizedCreatorsRef = useRef(null);
 
   // Refs for post-processing
   const composerRef = useRef(null);
@@ -237,8 +259,17 @@ function App() {
         return;
       }
 
-      const cosmicObject = objectCreators[currentSection]();
+      // Use optimized creators with LOD support
+      const creators = optimizedCreatorsRef.current || objectCreators;
+      const cosmicObject = creators[currentSection]();
       sceneRef.current.add(cosmicObject);
+
+      // Enforce max objects limit (remove oldest if exceeded)
+      if (bodiesRef.current.length >= graphicsSettings.performance.maxObjects) {
+        const oldest = bodiesRef.current.shift();
+        sceneRef.current.remove(oldest.mesh);
+        worldRef.current.removeRigidBody(oldest.body);
+      }
 
       const mouseXNorm = (x / window.innerWidth) * 2 - 1;
       const mouseYNorm = -(y / window.innerHeight) * 2 + 1;
@@ -345,6 +376,86 @@ function App() {
     }
   };
 
+  // Handle graphics settings changes
+  const handleGraphicsSettingsChange = (newSettings) => {
+    setGraphicsSettings(newSettings);
+    saveSettings(newSettings);
+
+    // Apply lighting changes immediately
+    if (mainLightRef.current) {
+      mainLightRef.current.intensity = newSettings.lighting.mainLightIntensity;
+    }
+    if (secondaryLightRef.current) {
+      secondaryLightRef.current.intensity = newSettings.lighting.secondaryLightIntensity;
+    }
+    if (sceneRef.current && sceneRef.current.children) {
+      const ambientLight = sceneRef.current.children.find(child => child.type === 'AmbientLight');
+      if (ambientLight) {
+        ambientLight.intensity = newSettings.lighting.ambientIntensity;
+      }
+    }
+
+    // Apply post-processing changes immediately
+    if (bloomPassRef.current) {
+      bloomPassRef.current.strength = newSettings.postProcessing.bloomStrength;
+      bloomPassRef.current.threshold = newSettings.postProcessing.bloomThreshold;
+      bloomPassRef.current.radius = newSettings.postProcessing.bloomRadius;
+    }
+    if (chromaticAberrationPassRef.current) {
+      chromaticAberrationPassRef.current.uniforms.amount.value = newSettings.postProcessing.chromaticAberration;
+    }
+    if (vignettePassRef.current) {
+      vignettePassRef.current.uniforms.darkness.value = newSettings.postProcessing.vignetteIntensity;
+    }
+
+    // Update particle counts if changed
+    if (starFieldRef.current && starFieldRef.current.count !== newSettings.performance.starCount) {
+      const newStarField = updateParticleCount(
+        sceneRef.current,
+        starFieldRef.current,
+        newSettings.performance.starCount,
+        'stars'
+      );
+      starFieldRef.current = newStarField;
+    }
+    if (nebulaRef.current && nebulaRef.current.count !== newSettings.performance.nebulaCount) {
+      const newNebula = updateParticleCount(
+        sceneRef.current,
+        nebulaRef.current,
+        newSettings.performance.nebulaCount,
+        'nebula'
+      );
+      nebulaRef.current = newNebula;
+    }
+
+    // Update auto-quality settings
+    if (performanceMonitorRef.current) {
+      if (newSettings.quality.autoAdjust) {
+        performanceMonitorRef.current.enableAutoAdjust(
+          newSettings.quality.preset,
+          newSettings.performance.targetFPS
+        );
+      } else {
+        performanceMonitorRef.current.disableAutoAdjust();
+      }
+    }
+
+    // Recreate optimized creators if geometry detail changed
+    if (optimizedCreatorsRef.current) {
+      optimizedCreatorsRef.current = createOptimizedObjectCreators(
+        newSettings.performance.geometryDetail,
+        newSettings.lighting.glowIntensity
+      );
+    }
+  };
+
+  // Handle quality preset change
+  const handleQualityPresetChange = (presetName) => {
+    const newSettings = applyPreset(presetName);
+    handleGraphicsSettingsChange(newSettings);
+    showModeIndicator(`QUALITÉ: ${presetName.toUpperCase()}`);
+  };
+
   // Handle section navigation
   const handleSectionClick = (section) => {
     const totalSections = 11;
@@ -441,9 +552,13 @@ function App() {
       });
     }
 
-    // Background animations
-    if (starFieldRef.current) starFieldRef.current.rotation.y = timeRef.current * 0.015;
-    if (nebulaRef.current) nebulaRef.current.rotation.y = timeRef.current * 0.008;
+    // Background animations (instanced particles optimized)
+    if (starFieldRef.current) {
+      animateInstancedStarField(starFieldRef.current, dt * 1000);
+    }
+    if (nebulaRef.current) {
+      animateInstancedNebula(nebulaRef.current, dt * 1000);
+    }
     ringsRef.current.forEach((ring, i) => {
       ring.rotation.z = timeRef.current * (0.08 + i * 0.03);
     });
@@ -465,8 +580,21 @@ function App() {
 
     cameraRef.current.lookAt(0, 3, 0);
 
+    // Performance monitoring and auto-quality adjustment
+    if (performanceMonitorRef.current) {
+      performanceMonitorRef.current.update();
+      setCurrentFPS(performanceMonitorRef.current.getFPS());
+
+      // Check if quality should be adjusted
+      const newPreset = performanceMonitorRef.current.checkAndAdjustQuality();
+      if (newPreset) {
+        console.log(`[App] Auto-adjusting quality to: ${newPreset}`);
+        handleQualityPresetChange(newPreset);
+      }
+    }
+
     // Use post-processing composer if enabled, otherwise direct render
-    if (postProcessingEnabled && composerRef.current) {
+    if (graphicsSettings.postProcessing.enabled && composerRef.current) {
       // Update film grain time
       if (filmGrainPassRef.current) {
         filmGrainPassRef.current.uniforms.time.value = timeRef.current;
@@ -684,72 +812,36 @@ function App() {
         scene.add(gridGroup);
         gridGroupRef.current = gridGroup;
 
-        // Stars
-        const starCount = 5000;
-        const starGeometry = new THREE.BufferGeometry();
-        const starPositions = new Float32Array(starCount * 3);
-        const starColors = new Float32Array(starCount * 3);
+        // Initialize optimization systems
+        debugManager.log('Init', 'Initializing optimization systems...');
 
-        for (let i = 0; i < starCount; i++) {
-          const theta = Math.random() * Math.PI * 2;
-          const phi = Math.acos(Math.random() * 2 - 1);
-          const radius = 50 + Math.random() * 150;
+        // Object Pool for click-spawned objects
+        objectPoolRef.current = new ObjectPool(graphicsSettings.performance.maxObjects);
 
-          starPositions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-          starPositions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
-          starPositions[i * 3 + 2] = radius * Math.cos(phi);
-
-          const color = new THREE.Color().setHSL(Math.random() * 0.2 + 0.5, 0.8, 0.8);
-          starColors[i * 3] = color.r;
-          starColors[i * 3 + 1] = color.g;
-          starColors[i * 3 + 2] = color.b;
+        // Performance Monitor
+        performanceMonitorRef.current = new PerformanceMonitor();
+        if (graphicsSettings.quality.autoAdjust) {
+          performanceMonitorRef.current.enableAutoAdjust(
+            graphicsSettings.quality.preset,
+            graphicsSettings.performance.targetFPS
+          );
         }
 
-        starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-        starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+        // Optimized object creators with LOD
+        optimizedCreatorsRef.current = createOptimizedObjectCreators(
+          graphicsSettings.performance.geometryDetail,
+          graphicsSettings.lighting.glowIntensity
+        );
 
-        const starMaterial = new THREE.PointsMaterial({
-          size: 0.3,
-          vertexColors: true,
-          transparent: true,
-          opacity: 0.8,
-          blending: THREE.AdditiveBlending
-        });
-
-        const starField = new THREE.Points(starGeometry, starMaterial);
+        // Stars (InstancedMesh - single draw call!)
+        debugManager.log('Init', `Creating ${graphicsSettings.performance.starCount} instanced stars...`);
+        const starField = createInstancedStarField(graphicsSettings.performance.starCount);
         scene.add(starField);
         starFieldRef.current = starField;
 
-        // Nebula
-        const nebulaGeometry = new THREE.BufferGeometry();
-        const nebulaCount = 800;
-        const nebulaPositions = new Float32Array(nebulaCount * 3);
-        const nebulaColors = new Float32Array(nebulaCount * 3);
-
-        for (let i = 0; i < nebulaCount; i++) {
-          nebulaPositions[i * 3] = (Math.random() - 0.5) * 100;
-          nebulaPositions[i * 3 + 1] = (Math.random() - 0.5) * 50 + 15;
-          nebulaPositions[i * 3 + 2] = (Math.random() - 0.5) * 100 - 30;
-
-          const hue = Math.random() * 0.3 + 0.6;
-          const color = new THREE.Color().setHSL(hue, 1, 0.5);
-          nebulaColors[i * 3] = color.r;
-          nebulaColors[i * 3 + 1] = color.g;
-          nebulaColors[i * 3 + 2] = color.b;
-        }
-
-        nebulaGeometry.setAttribute('position', new THREE.BufferAttribute(nebulaPositions, 3));
-        nebulaGeometry.setAttribute('color', new THREE.BufferAttribute(nebulaColors, 3));
-
-        const nebulaMaterial = new THREE.PointsMaterial({
-          size: 4,
-          vertexColors: true,
-          transparent: true,
-          opacity: 0.12,
-          blending: THREE.AdditiveBlending
-        });
-
-        const nebula = new THREE.Points(nebulaGeometry, nebulaMaterial);
+        // Nebula (InstancedMesh - single draw call!)
+        debugManager.log('Init', `Creating ${graphicsSettings.performance.nebulaCount} instanced nebula particles...`);
+        const nebula = createInstancedNebula(graphicsSettings.performance.nebulaCount);
         scene.add(nebula);
         nebulaRef.current = nebula;
 
@@ -903,6 +995,20 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [debugPanelVisible]);
+
+  // Keyboard shortcut for graphics settings (Ctrl+G or Cmd+G)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
+        e.preventDefault();
+        setGraphicsSettingsVisible(prev => !prev);
+        debugManager.log('Settings', `Graphics settings ${!graphicsSettingsVisible ? 'opened' : 'closed'}`);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [graphicsSettingsVisible]);
 
   // Update gravity when gravityInverted changes
   useEffect(() => {
@@ -1193,6 +1299,28 @@ function App() {
       <Suspense fallback={null}>
         <DebugPanel visible={debugPanelVisible} />
       </Suspense>
+
+      {/* Graphics Settings Panel */}
+      <Suspense fallback={null}>
+        <GraphicsSettings
+          visible={graphicsSettingsVisible}
+          onClose={() => setGraphicsSettingsVisible(false)}
+          settings={graphicsSettings}
+          onSettingsChange={handleGraphicsSettingsChange}
+          currentFPS={currentFPS}
+        />
+      </Suspense>
+
+      {/* Graphics Settings Button (floating) */}
+      {!graphicsSettingsVisible && (
+        <button
+          className="graphics-settings-button"
+          onClick={() => setGraphicsSettingsVisible(true)}
+          title="Paramètres Graphiques (Ctrl+G)"
+        >
+          ⚙️
+        </button>
+      )}
     </>
   );
 }
