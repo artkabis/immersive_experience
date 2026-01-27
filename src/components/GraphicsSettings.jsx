@@ -140,7 +140,13 @@ function GraphicsSettings({
             <div className="settings-section">
               <h3>Préréglages de Qualité</h3>
 
-              <div className="preset-buttons">
+              <div className="preset-buttons preset-buttons-5">
+                <button
+                  className={localSettings.quality.preset === 'original' ? 'preset-btn active' : 'preset-btn'}
+                  onClick={() => handlePresetChange('original')}
+                >
+                  ⭐ Original<br/><small>v2.0.0</small>
+                </button>
                 <button
                   className={localSettings.quality.preset === 'low' ? 'preset-btn active' : 'preset-btn'}
                   onClick={() => handlePresetChange('low')}

@@ -4,6 +4,40 @@
 // Professional quality management for WebGL performance
 
 export const QUALITY_PRESETS = {
+  original: {
+    name: 'Original',
+    description: 'Configuration v2.0.0 (avant optimisations)',
+    quality: {
+      preset: 'original',
+      autoAdjust: false
+    },
+    lighting: {
+      ambientIntensity: 0.3,
+      mainLightIntensity: 300,
+      secondaryLightIntensity: 150,
+      glowIntensity: 0.8
+    },
+    postProcessing: {
+      enabled: true,
+      bloomStrength: 0.9,
+      bloomThreshold: 0.15,
+      bloomRadius: 0.4,
+      chromaticAberration: 0.0015,
+      vignetteIntensity: 0.8
+    },
+    performance: {
+      maxObjects: 200,              // Pas de limite stricte avant
+      starCount: 5000,               // Original
+      nebulaCount: 800,              // Original
+      targetFPS: 60,
+      showFPS: true,
+      geometryDetail: 'ultra',       // Géométries originales complexes
+      enableShadows: false,
+      useInstancing: false,          // DÉSACTIVÉ - utilise Points comme avant
+      enableObjectPooling: false     // DÉSACTIVÉ - pas d'optimisation
+    }
+  },
+
   low: {
     name: 'Low',
     description: 'Performance optimale (60+ FPS)',

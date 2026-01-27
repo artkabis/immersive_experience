@@ -378,6 +378,8 @@ function App() {
 
   // Handle graphics settings changes
   const handleGraphicsSettingsChange = (newSettings) => {
+    const oldSettings = graphicsSettings;
+
     setGraphicsSettings(newSettings);
     saveSettings(newSettings);
 
@@ -408,24 +410,59 @@ function App() {
       vignettePassRef.current.uniforms.darkness.value = newSettings.postProcessing.vignetteIntensity;
     }
 
-    // Update particle counts if changed
-    if (starFieldRef.current && starFieldRef.current.count !== newSettings.performance.starCount) {
-      const newStarField = updateParticleCount(
-        sceneRef.current,
-        starFieldRef.current,
+    // Check if we need to recreate particles (count changed OR instancing mode changed)
+    const needsStarRecreation =
+      !starFieldRef.current ||
+      oldSettings.performance.starCount !== newSettings.performance.starCount ||
+      oldSettings.performance.useInstancing !== newSettings.performance.useInstancing;
+
+    const needsNebulaRecreation =
+      !nebulaRef.current ||
+      oldSettings.performance.nebulaCount !== newSettings.performance.nebulaCount ||
+      oldSettings.performance.useInstancing !== newSettings.performance.useInstancing;
+
+    // Recreate stars if needed
+    if (needsStarRecreation && sceneRef.current) {
+      console.log('[Settings] Recreating stars...');
+
+      // Remove old stars
+      if (starFieldRef.current) {
+        sceneRef.current.remove(starFieldRef.current);
+        if (starFieldRef.current.geometry) starFieldRef.current.geometry.dispose();
+        if (starFieldRef.current.material) starFieldRef.current.material.dispose();
+      }
+
+      // Create new stars
+      const newStarField = createInstancedStarField(
         newSettings.performance.starCount,
-        'stars'
+        newSettings.performance.useInstancing
       );
+      sceneRef.current.add(newStarField);
       starFieldRef.current = newStarField;
+
+      console.log(`[Settings] Stars recreated: ${newSettings.performance.starCount} (${newSettings.performance.useInstancing ? 'InstancedMesh' : 'Points'})`);
     }
-    if (nebulaRef.current && nebulaRef.current.count !== newSettings.performance.nebulaCount) {
-      const newNebula = updateParticleCount(
-        sceneRef.current,
-        nebulaRef.current,
+
+    // Recreate nebula if needed
+    if (needsNebulaRecreation && sceneRef.current) {
+      console.log('[Settings] Recreating nebula...');
+
+      // Remove old nebula
+      if (nebulaRef.current) {
+        sceneRef.current.remove(nebulaRef.current);
+        if (nebulaRef.current.geometry) nebulaRef.current.geometry.dispose();
+        if (nebulaRef.current.material) nebulaRef.current.material.dispose();
+      }
+
+      // Create new nebula
+      const newNebula = createInstancedNebula(
         newSettings.performance.nebulaCount,
-        'nebula'
+        newSettings.performance.useInstancing
       );
+      sceneRef.current.add(newNebula);
       nebulaRef.current = newNebula;
+
+      console.log(`[Settings] Nebula recreated: ${newSettings.performance.nebulaCount} (${newSettings.performance.useInstancing ? 'InstancedMesh' : 'Points'})`);
     }
 
     // Update auto-quality settings
@@ -441,12 +478,25 @@ function App() {
     }
 
     // Recreate optimized creators if geometry detail changed
-    if (optimizedCreatorsRef.current) {
+    const needsCreatorUpdate =
+      oldSettings.performance.geometryDetail !== newSettings.performance.geometryDetail ||
+      oldSettings.lighting.glowIntensity !== newSettings.lighting.glowIntensity;
+
+    if (needsCreatorUpdate) {
+      console.log('[Settings] Updating object creators with new geometry detail...');
       optimizedCreatorsRef.current = createOptimizedObjectCreators(
         newSettings.performance.geometryDetail,
         newSettings.lighting.glowIntensity
       );
+
+      // Clear existing objects to force recreation with new geometry
+      if (bodiesRef.current.length > 0) {
+        console.log('[Settings] Clearing existing objects to apply new geometry...');
+        clearAllObjects();
+      }
     }
+
+    console.log('[Settings] Graphics settings applied successfully');
   };
 
   // Handle quality preset change
@@ -833,15 +883,23 @@ function App() {
           graphicsSettings.lighting.glowIntensity
         );
 
-        // Stars (InstancedMesh - single draw call!)
-        debugManager.log('Init', `Creating ${graphicsSettings.performance.starCount} instanced stars...`);
-        const starField = createInstancedStarField(graphicsSettings.performance.starCount);
+        // Stars (InstancedMesh or Points based on settings)
+        const starType = graphicsSettings.performance.useInstancing ? 'InstancedMesh' : 'Points';
+        debugManager.log('Init', `Creating ${graphicsSettings.performance.starCount} stars (${starType})...`);
+        const starField = createInstancedStarField(
+          graphicsSettings.performance.starCount,
+          graphicsSettings.performance.useInstancing
+        );
         scene.add(starField);
         starFieldRef.current = starField;
 
-        // Nebula (InstancedMesh - single draw call!)
-        debugManager.log('Init', `Creating ${graphicsSettings.performance.nebulaCount} instanced nebula particles...`);
-        const nebula = createInstancedNebula(graphicsSettings.performance.nebulaCount);
+        // Nebula (InstancedMesh or Points based on settings)
+        const nebulaType = graphicsSettings.performance.useInstancing ? 'InstancedMesh' : 'Points';
+        debugManager.log('Init', `Creating ${graphicsSettings.performance.nebulaCount} nebula particles (${nebulaType})...`);
+        const nebula = createInstancedNebula(
+          graphicsSettings.performance.nebulaCount,
+          graphicsSettings.performance.useInstancing
+        );
         scene.add(nebula);
         nebulaRef.current = nebula;
 

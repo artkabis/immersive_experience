@@ -197,6 +197,10 @@
   margin-bottom: 30px;
 }
 
+.preset-buttons-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
 .preset-btn {
   background: rgba(0, 0, 0, 0.5);
   border: 2px solid rgba(255, 255, 255, 0.2);
