@@ -378,8 +378,22 @@ function App() {
 
   // Handle graphics settings changes
   const handleGraphicsSettingsChange = (newSettings) => {
-    const oldSettings = graphicsSettings;
+    console.log('=== [Settings] Starting settings change ===');
+    console.log('[Settings] Old preset:', graphicsSettings.quality.preset);
+    console.log('[Settings] New preset:', newSettings.quality.preset);
+    console.log('[Settings] Old starCount:', graphicsSettings.performance.starCount);
+    console.log('[Settings] New starCount:', newSettings.performance.starCount);
+    console.log('[Settings] Old useInstancing:', graphicsSettings.performance.useInstancing);
+    console.log('[Settings] New useInstancing:', newSettings.performance.useInstancing);
 
+    // IMPORTANT : Capturer les anciennes valeurs AVANT setGraphicsSettings
+    const oldStarCount = graphicsSettings.performance.starCount;
+    const oldNebulaCount = graphicsSettings.performance.nebulaCount;
+    const oldUseInstancing = graphicsSettings.performance.useInstancing;
+    const oldGeometryDetail = graphicsSettings.performance.geometryDetail;
+    const oldGlowIntensity = graphicsSettings.lighting.glowIntensity;
+
+    // Update state
     setGraphicsSettings(newSettings);
     saveSettings(newSettings);
 
@@ -410,20 +424,22 @@ function App() {
       vignettePassRef.current.uniforms.darkness.value = newSettings.postProcessing.vignetteIntensity;
     }
 
-    // Check if we need to recreate particles (count changed OR instancing mode changed)
-    const needsStarRecreation =
-      !starFieldRef.current ||
-      oldSettings.performance.starCount !== newSettings.performance.starCount ||
-      oldSettings.performance.useInstancing !== newSettings.performance.useInstancing;
+    // Check if we need to recreate particles
+    const starCountChanged = oldStarCount !== newSettings.performance.starCount;
+    const nebulaCountChanged = oldNebulaCount !== newSettings.performance.nebulaCount;
+    const instancingChanged = oldUseInstancing !== newSettings.performance.useInstancing;
 
-    const needsNebulaRecreation =
-      !nebulaRef.current ||
-      oldSettings.performance.nebulaCount !== newSettings.performance.nebulaCount ||
-      oldSettings.performance.useInstancing !== newSettings.performance.useInstancing;
+    console.log('[Settings] Star count changed:', starCountChanged, `(${oldStarCount} -> ${newSettings.performance.starCount})`);
+    console.log('[Settings] Nebula count changed:', nebulaCountChanged, `(${oldNebulaCount} -> ${newSettings.performance.nebulaCount})`);
+    console.log('[Settings] Instancing changed:', instancingChanged, `(${oldUseInstancing} -> ${newSettings.performance.useInstancing})`);
+
+    // ALWAYS recreate stars if count or instancing changed
+    const needsStarRecreation = starCountChanged || instancingChanged;
+    const needsNebulaRecreation = nebulaCountChanged || instancingChanged;
 
     // Recreate stars if needed
     if (needsStarRecreation && sceneRef.current) {
-      console.log('[Settings] Recreating stars...');
+      console.log('[Settings] 🌟 RECREATING STARS...');
 
       // Remove old stars
       if (starFieldRef.current) {
@@ -440,12 +456,14 @@ function App() {
       sceneRef.current.add(newStarField);
       starFieldRef.current = newStarField;
 
-      console.log(`[Settings] Stars recreated: ${newSettings.performance.starCount} (${newSettings.performance.useInstancing ? 'InstancedMesh' : 'Points'})`);
+      console.log(`[Settings] ✅ Stars recreated: ${newSettings.performance.starCount} (${newSettings.performance.useInstancing ? 'InstancedMesh' : 'Points'})`);
+    } else {
+      console.log('[Settings] ⏭️ Skipping stars recreation (no changes)');
     }
 
     // Recreate nebula if needed
     if (needsNebulaRecreation && sceneRef.current) {
-      console.log('[Settings] Recreating nebula...');
+      console.log('[Settings] 🌌 RECREATING NEBULA...');
 
       // Remove old nebula
       if (nebulaRef.current) {
@@ -462,7 +480,9 @@ function App() {
       sceneRef.current.add(newNebula);
       nebulaRef.current = newNebula;
 
-      console.log(`[Settings] Nebula recreated: ${newSettings.performance.nebulaCount} (${newSettings.performance.useInstancing ? 'InstancedMesh' : 'Points'})`);
+      console.log(`[Settings] ✅ Nebula recreated: ${newSettings.performance.nebulaCount} (${newSettings.performance.useInstancing ? 'InstancedMesh' : 'Points'})`);
+    } else {
+      console.log('[Settings] ⏭️ Skipping nebula recreation (no changes)');
     }
 
     // Update auto-quality settings
@@ -478,12 +498,15 @@ function App() {
     }
 
     // Recreate optimized creators if geometry detail changed
-    const needsCreatorUpdate =
-      oldSettings.performance.geometryDetail !== newSettings.performance.geometryDetail ||
-      oldSettings.lighting.glowIntensity !== newSettings.lighting.glowIntensity;
+    const geometryDetailChanged = oldGeometryDetail !== newSettings.performance.geometryDetail;
+    const glowIntensityChanged = oldGlowIntensity !== newSettings.lighting.glowIntensity;
+    const needsCreatorUpdate = geometryDetailChanged || glowIntensityChanged;
+
+    console.log('[Settings] Geometry detail changed:', geometryDetailChanged, `(${oldGeometryDetail} -> ${newSettings.performance.geometryDetail})`);
+    console.log('[Settings] Glow intensity changed:', glowIntensityChanged, `(${oldGlowIntensity} -> ${newSettings.lighting.glowIntensity})`);
 
     if (needsCreatorUpdate) {
-      console.log('[Settings] Updating object creators with new geometry detail...');
+      console.log('[Settings] 🔧 Updating object creators...');
       optimizedCreatorsRef.current = createOptimizedObjectCreators(
         newSettings.performance.geometryDetail,
         newSettings.lighting.glowIntensity
@@ -491,12 +514,12 @@ function App() {
 
       // Clear existing objects to force recreation with new geometry
       if (bodiesRef.current.length > 0) {
-        console.log('[Settings] Clearing existing objects to apply new geometry...');
+        console.log(`[Settings] 🗑️ Clearing ${bodiesRef.current.length} existing objects...`);
         clearAllObjects();
       }
     }
 
-    console.log('[Settings] Graphics settings applied successfully');
+    console.log('=== [Settings] Settings change complete ===\n');
   };
 
   // Handle quality preset change

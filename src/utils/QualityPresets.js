@@ -213,9 +213,21 @@ export const GEOMETRY_DETAIL = {
 
 /**
  * Get default settings based on user's device capabilities
- * @returns {string} Preset name ('low', 'medium', 'high', 'ultra')
+ * CONSERVATEUR : Par défaut 'original' pour éviter problèmes de performance
+ * @returns {string} Preset name ('original', 'low', 'medium', 'high', 'ultra')
  */
 export function detectOptimalPreset() {
+  // TOUJOURS retourner 'original' par défaut pour première utilisation
+  // L'utilisateur peut ensuite choisir d'optimiser dans les settings
+  // Ceci évite les problèmes de FPS bas au démarrage
+
+  console.log('[QualityPresets] Using conservative default: "original" (v2.0.0 configuration)');
+  console.log('[QualityPresets] Tip: Use Graphics Settings (Ctrl+G) to optimize if needed');
+
+  return 'original';
+
+  /* AUTO-DETECTION DÉSACTIVÉE (trop aggressive)
+
   // Check GPU tier
   const canvas = document.createElement('canvas');
   const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
@@ -237,20 +249,21 @@ export function detectOptimalPreset() {
 
   if (isMobile) return 'low';
 
-  // GPU tier detection (simple heuristic)
+  // GPU tier detection (simple heuristic) - TROP OPTIMISTE
   if (renderer.includes('RTX') || renderer.includes('RX 6') || renderer.includes('RX 7')) {
-    return memory >= 8 && cores >= 8 ? 'ultra' : 'high';
+    return memory >= 8 && cores >= 8 ? 'medium' : 'low';  // Conservateur
   }
 
   if (renderer.includes('GTX') || renderer.includes('RX 5')) {
-    return memory >= 6 && cores >= 6 ? 'high' : 'medium';
+    return memory >= 6 && cores >= 6 ? 'medium' : 'low';  // Conservateur
   }
 
-  // Default fallback based on cores and memory
-  if (cores >= 8 && memory >= 8) return 'high';
-  if (cores >= 4 && memory >= 4) return 'medium';
+  // Default fallback - CONSERVATEUR
+  if (cores >= 8 && memory >= 8) return 'medium';  // Pas high
+  if (cores >= 4 && memory >= 4) return 'low';     // Pas medium
 
   return 'low';
+  */
 }
 
 /**
@@ -301,11 +314,15 @@ export function loadSettings() {
  */
 export function getInitialSettings() {
   const stored = loadSettings();
-  if (stored) return stored;
+  if (stored) {
+    console.log(`[QualityPresets] Loaded settings from localStorage: ${stored.quality.preset}`);
+    return stored;
+  }
 
-  // Auto-detect optimal preset
+  // Auto-detect optimal preset (conservateur par défaut)
   const optimalPreset = detectOptimalPreset();
-  console.log(`Auto-detected optimal preset: ${optimalPreset}`);
+  console.log(`[QualityPresets] 🎯 Auto-detected optimal preset: ${optimalPreset}`);
+  console.log(`[QualityPresets] ℹ️ You can change this anytime in Graphics Settings (Ctrl+G)`);
 
   return applyPreset(optimalPreset);
 }
